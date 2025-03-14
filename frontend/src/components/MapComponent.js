@@ -66,19 +66,39 @@ const MapComponent = ({
         setIsScriptLoaded(true);
     };
 
-    const handleSelect = async (address) => {
+    const handleSelect = async (address, placeId) => {
         if (disabled) return;
-
+    
+        console.log("handleSelect called with:", address, placeId);  // Debug log
+    
         setSearchLocation(address);
-        const geocoder = new window.google.maps.Geocoder();
-        geocoder.geocode({ address }, (results, status) => {
-            if (status === "OK" && results[0].geometry) {
+    
+        const placesService = new window.google.maps.places.PlacesService(document.createElement("div"));
+    
+        placesService.getDetails({ placeId }, (place, status) => {
+            if (status === window.google.maps.places.PlacesServiceStatus.OK) {
+                // Extract city/district from address components
+                let city = "";
+                if (place.address_components) {
+                    for (let component of place.address_components) {
+                        if (component.types.includes("locality")) {
+                            city = component.long_name;  // City name (e.g., Mussoorie, Varanasi)
+                            break;
+                        } else if (component.types.includes("administrative_area_level_2")) {
+                            city = component.long_name;  // District name (if locality is missing)
+                        }
+                    }
+                }
+    
+                // Construct full name with city
                 const location = {
-                    name: results[0].formatted_address,
-                    lat: results[0].geometry.location.lat(),
-                    lng: results[0].geometry.location.lng(),
+                    name: city ? `${place.name}, ${city}` : place.name, // Example: "Bhatta Falls, Mussoorie"
+                    lat: place.geometry.location.lat(),
+                    lng: place.geometry.location.lng(),
                 };
-
+    
+                console.log("Adding location inside handleSelect:", location); // Debug log
+    
                 setSelectedLocation(location);
                 setMarkers((prevMarkers) => [...prevMarkers, location]);
                 if (onAddMarker) {
@@ -87,6 +107,8 @@ const MapComponent = ({
             }
         });
     };
+    
+    
 
     return (
         <div className="flex flex-col items-center justify-center w-full max-w-4xl mx-auto space-y-6 p-4">
@@ -97,32 +119,33 @@ const MapComponent = ({
             />
 
             {showSearchBar && !disabled && isScriptLoaded && (
-                <PlacesAutocomplete
-                    value={searchLocation}
-                    onChange={setSearchLocation}
-                    onSelect={handleSelect}
-                >
-                    {({ getInputProps, suggestions, getSuggestionItemProps, loading }) => (
-                        <div className="w-full max-w-lg mx-auto">
-                            <input
-                                {...getInputProps({ placeholder: 'Search for a place' })}
-                                className="w-full p-4 mb-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                            />
-                            <div className="bg-white rounded-lg shadow-lg">
-                                {loading && <div className="p-2 text-center">Loading...</div>}
-                                {suggestions.map((suggestion, index) => (
-                                    <div
-                                        key={index}
-                                        {...getSuggestionItemProps(suggestion)}
-                                        className="cursor-pointer p-4 border-b border-gray-300 hover:bg-gray-100"
-                                    >
-                                        {suggestion.description}
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                </PlacesAutocomplete>
+               <PlacesAutocomplete
+               value={searchLocation}
+               onChange={setSearchLocation}
+               onSelect={handleSelect} // This will handle selection
+           >
+               {({ getInputProps, suggestions, getSuggestionItemProps, loading }) => (
+                   <div className="w-full max-w-lg mx-auto">
+                       <input
+                           {...getInputProps({ placeholder: 'Search for a place' })}
+                           className="w-full p-4 mb-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                       />
+                       <div className="bg-white rounded-lg shadow-lg">
+                           {loading && <div className="p-2 text-center">Loading...</div>}
+                           {suggestions.map((suggestion, index) => (
+                               <div
+                                   key={index}
+                                   {...getSuggestionItemProps(suggestion)}
+                                   className="cursor-pointer p-4 border-b border-gray-300 hover:bg-gray-100"
+                               >
+                                   {suggestion.description}
+                               </div>
+                           ))}
+                       </div>
+                   </div>
+               )}
+           </PlacesAutocomplete>
+           
             )}
 
             <MapContainer

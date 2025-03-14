@@ -93,9 +93,15 @@ const UpcomingTrip = () => {
                         >
                             <div className="relative">
                                 <h2 className="text-xl font-bold uppercase text-gray-800 mb-4">{trip.tripName}</h2>
-                                <p className="text-gray-600"><strong>Trip Budget:</strong> {trip.tripBudget}</p>
-                                <p className="text-gray-600"><strong>Start Date:</strong> {trip.tripStartDate}</p>
-                                <p className="text-gray-600"><strong>Start Time:</strong> {trip.tripStartTime}</p>
+                                <p className="text-gray-600"><strong>Trip Budget: </strong> Rs. {trip.tripBudget}</p>
+                                <p className="text-gray-600"><strong>Trip Date:  </strong>  {trip.tripStartDate.split('T')[0]}</p>
+                                <p className="text-gray-600"><strong>Trip Time: </strong>  
+                                    {new Date(`1970-01-01T${trip.tripStartTime}`).toLocaleTimeString("en-US", {
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                        hour12: true
+                                    })}
+                                </p>
                                 <p className="text-gray-600"><strong>Destinations:</strong></p>
                                 <ul className="list-disc pl-5 text-gray-600">
                                     {trip.optimizedLocations.map((location, i) => (

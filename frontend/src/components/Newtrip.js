@@ -26,7 +26,6 @@ const NewTrip = () => {
     const [isTimeReadOnly, setIsTimeReadOnly] = useState(true); // New state for time input
     const [tripId, setTripId] = useState(null); // New state for trip ID
 
-    console.log()
 
 
 
@@ -67,6 +66,8 @@ const NewTrip = () => {
 
 
     const handleAddDestination = (location) => {
+        console.log("Adding destination:", location);
+
         setDestinations((prevDestinations) => [...prevDestinations, location]);
     };
 
@@ -202,7 +203,7 @@ const NewTrip = () => {
     return (
         <div className="max-w-5xl mx-auto p-6 flex flex-col gap-6">
             <h1 className="text-4xl font-extrabold text-center text-gray-800 mb-8">
-                {isEdit ? 'Edit Your Trip' : 'Plan Your New Trip'}
+            {isEdit && !isReadOnly ? 'Edit Your Trip' : isReadOnly ? 'View Your Trip' : 'Plan Your New Trip'}
             </h1>
 
             {/* Trip Name */}
@@ -220,17 +221,27 @@ const NewTrip = () => {
                 </div>
                 
                 
-                
+                {/* Trip Budget */}
                 <div className='lg:w-1/2 md:w-100%'>
                  <label className="block text-lg font-semibold text-gray-700 mb-2">Trip Budget</label>
-                <input
-                    type="number"
+                 <input type="number"
                     className="w-full p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     value={tripBudget}
-                    onChange={(e) => setTripBudget(e.target.value)}
+                    onChange={(e) => {
+                        const value = e.target.value;
+                        if (!/[^0-9]/.test(value)) {  // Allow only digits (0-9)
+                            setTripBudget(value);
+                        }
+                    }}
                     placeholder="Enter trip budget"
-                    disabled={isReadOnly} // Disable in edit mode
+                    disabled={isReadOnly} // Disable in view mode
+                    onKeyDown={(e) => {
+                        if (e.key === 'e' || e.key === '+' || e.key === '-') {
+                            e.preventDefault(); // Block e, +, and -
+                        }
+                    }}
                 />
+
                 </div>
             </div>
 
@@ -241,7 +252,7 @@ const NewTrip = () => {
                 <input
                     type="date"
                     className="w-full p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={tripStartDate}
+                    value={tripStartDate.split("T")[0]}
                     onChange={(e) => setTripStartDate(e.target.value)}
                     disabled={isReadOnly} // Disable in view mode
                 />
@@ -289,6 +300,7 @@ const NewTrip = () => {
                         Search for a place to add destinations.
                     </p>
                 )}
+                {console.log(destinations)}
                 {destinations.length > 0 && (
                     <ul className="mt-4">
                         {destinations.map((destination, index) => (
@@ -297,7 +309,7 @@ const NewTrip = () => {
                                 className="flex justify-between items-center bg-white border-2 border-gray-200 p-4 rounded-lg shadow-sm mb-2"
                             >
                                 <span className="text-gray-800">
-                                    {destination.lat.toFixed(4)}, {destination.lng.toFixed(4)}
+                                    {destination.name}
                                 </span>
                                 {!isReadOnly && (
                                     <button
@@ -336,7 +348,7 @@ const NewTrip = () => {
 
             {/* Optimized Route Details */}
             {optimizedLocations && optimizedLocations.length > 0 && (
-                <div className="bg-gray-100 p-6 rounded-lg shadow-md flex flex-col gap-2">
+                <div className="bg-blue-200 p-6 rounded-lg shadow-md flex flex-col gap-2">
                     <h3 className="text-xl font-semibold text-gray-700 ">Optimized Route Details</h3>
                     <ul className="list-disc pl-5">
                         {optimizedLocations.map((location, index) => (
@@ -356,7 +368,7 @@ const NewTrip = () => {
 
             {/* Save Trip */}
             {console.log("lenghtttttttt", destinations.length)}
-            {console.log("dateeeeeeeeeeee", tripStartDate)};
+            {console.log("dateeeeeeeeeeee", tripStartDate)}
 
 
 

@@ -48,35 +48,55 @@ const StartTrip = () => {
 
     const handleStartNavigation = () => {
         setIsNavigating(true);
+    
+        if (trip && trip.destinations.length > 0) {
+            const startLocation = trip.destinations[0]; // First destination as starting point
+            setUserLocation({ lat: startLocation.lat, lng: startLocation.lng });
+        }
+    
         trackUserLocation();
     };
+    
 
-    const trackUserLocation = () => {
-        if ("geolocation" in navigator) {
-            navigator.geolocation.watchPosition(
-                (position) => {
-                    const { latitude, longitude, heading } = position.coords;
-                    setUserLocation({ lat: latitude, lng: longitude });
-                    if (heading !== null) {
-                        setUserHeading(heading);
-                    }
-                    checkIfDestinationReached(latitude, longitude);
-                },
-                (error) => {
-                    console.error("Error getting location:", error);
-                    setError(`Location error: ${error.message}`);
-                },
-                {
-                    enableHighAccuracy: true,   // More accurate but consumes more power
-                    maximumAge: 0,              // No cached positions, always get fresh data
-                    timeout: 30000              // Increase timeout to 30 seconds
+    let firstAccuratePosition = false; // Track whether we have a good GPS fix
+
+const trackUserLocation = () => {
+    if ("geolocation" in navigator) {
+        navigator.geolocation.watchPosition(
+            (position) => {
+                const { latitude, longitude, accuracy, heading } = position.coords;
+                console.log("Raw Position Data =====", position.coords);
+
+                // Ignore inaccurate first readings (accuracy > 50 meters)
+                if (accuracy > 50 && !firstAccuratePosition) {
+                    console.warn("Skipping inaccurate location...");
+                    return; // Skip this update
                 }
-            );
-            
-        } else {
-            setError("Geolocation is not supported by this browser.");
-        }
-    };
+
+                firstAccuratePosition = true; // Mark first accurate position
+                
+                setUserLocation({ lat: latitude, lng: longitude });
+
+                if (heading !== null) {
+                    setUserHeading(heading);
+                }
+
+                checkIfDestinationReached(latitude, longitude);
+            },
+            (error) => {
+                console.error("Error getting location:", error);
+                setError(`Location error: ${error.message}`);
+            },
+            {
+                enableHighAccuracy: true,  // Get the most accurate location possible
+                maximumAge: 0,             // Prevent caching of old positions
+                timeout: 30000             // Increase timeout to 30 seconds
+            }
+        );
+    } else {
+        setError("Geolocation is not supported by this browser.");
+    }
+};
 
     const checkIfDestinationReached = (lat, lng) => {
         if (!trip || !trip.destinations.length) return;
