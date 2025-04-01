@@ -16,7 +16,6 @@ const Dashboard = () => {
     const { logoutUser } = useAuth();
     const [searchQuery, setSearchQuery] = useState('');
     const [places, setPlaces] = useState([]);
-    const [loading, setLoading] = useState(false);
     const [weatherQuery, setWeatherQuery] = useState("");
     const [weatherData, setWeatherData] = useState(null);
     const [showWeatherSearch, setShowWeatherSearch] = useState(false);
@@ -25,6 +24,10 @@ const Dashboard = () => {
     const [weatherError, setWeatherError] = useState(null);  // For Weather Search
     const [searchType, setSearchType] = useState("in"); // Default: Search in the place
     const [searchDistance, setSearchDistance] = useState(5); // Default: 100 km
+    const [magicSearchLoading, setMagicSearchLoading] = useState(false);
+    const [weatherLoading, setWeatherLoading] = useState(false);
+
+
 
 
 
@@ -52,65 +55,78 @@ const Dashboard = () => {
         }
     };
 
-  //  const genAI = new GoogleGenerativeAI("AIzaSyBZsgn1mqxFV7DHn722G0ZGWYJGYTfZHKc");  // Replace with your actual API Key
+   const genAI = new GoogleGenerativeAI("AIzaSyBZsgn1mqxFV7DHn722G0ZGWYJGYTfZHKc");  // Replace with your actual API Key
 
     
   const handleSearch = async () => {
     if (!searchQuery) return;
 
-    setLoading(true);
+    setMagicSearchLoading(true);
     setSearchError(null);
     setPlaces([]);
 
     const isValidLocation = await validateLocation(searchQuery);
+
     if (!isValidLocation) {
         setSearchError("Place not valid. Please enter a city, state, district, or village.");
-        setLoading(false);
+        setMagicSearchLoading(false);
         return;
     }
 
     try {
-        const apiKey = "AIzaSyDQIuSgbM1ww8UvtG7BQczqCjQPUifhwSs"; // Ensure this is valid
+        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+
         const searchDistances = [5, 10, 25, 50, 100, 200, 300, 400, 500, 750, 1000];
+
+        // Find the lower bound for the selected searchDistance
         const selectedIndex = searchDistances.indexOf(Number(searchDistance));
         const lowerRange = selectedIndex > 0 ? searchDistances[selectedIndex - 1] : 0;
 
-        // Get location coordinates
-        const geoResponse = await fetch(
-            `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(searchQuery)}&key=${apiKey}`
-        );
-        const geoData = await geoResponse.json();
 
-        if (!geoData.results.length) {
-            setSearchError("Location not found.");
-            setLoading(false);
-            return;
+        const prompt = searchType === "in"
+            ? `List exactly 10 famous tourist attractions in ${searchQuery}. Ensure all places are well-known and highly rated. Provide the name, address, and a short description in this format:
+                
+            1. **Place Name** - Address
+            *Description: Short description of the place (max 20 words)*`
+            
+            : `List exactly 10 of the most famous and highly-rated places that strictly fall within the range of ${lowerRange} km to ${searchDistance} km from ${searchQuery}. Do not include any place whose distance is less than ${lowerRange} km or more than ${searchDistance} km. Prioritize major landmarks, tourist attractions, and well-reviewed destinations. 
+
+            Ensure the places are strictly within the given range. Provide the results in this format:
+            
+            1. **Place Name** - Address
+            *Description: Short description of the place (max 20 words)*` ;
+
+   console.log(prompt);
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        const text = response.text();
+
+        // Extract places using regex
+        const placePattern = /\d+\.\s*\*\*(.+?)\*\*\s*-\s*(.+?)\n\s*\*Description:\s*(.+)/g;
+        let matches, placesList = [];
+
+        while ((matches = placePattern.exec(text)) !== null && placesList.length < 100) {
+            placesList.push({
+                name: matches[1].trim(),
+                address: matches[2].trim(),
+                description: matches[3].trim(),
+            });
         }
 
-        const { lat, lng } = geoData.results[0].geometry.location;
-
-        const placesResponse = await fetch(
-            `http://localhost:5000/places?searchType=${encodeURIComponent(searchType)}&searchQuery=${encodeURIComponent(searchQuery)}&lat=${lat}&lng=${lng}&lowerRange=${lowerRange}&searchDistance=${searchDistance}`
-        );
-
-        const placesData = await placesResponse.json();
-
-        console.log(placesData);
-
-        if (!placesData.results || placesData.results.length === 0) {
-            setSearchError("No tourist attractions found in the given range.");
-            setLoading(false);
-            return;
+        if (placesList.length === 0) {
+            setSearchError("No tourist attractions found.");
         }
 
-        // Further processing...
+        setPlaces(placesList);
+        fetchWeather(searchQuery);
     } catch (err) {
         setSearchError("Failed to fetch places. Please try again.");
-        console.error("Error:", err);
+        console.error("error: ", err);
     } finally {
-        setLoading(false);
+        setMagicSearchLoading(false);
     }
 };
+
 
 
 
@@ -123,35 +139,47 @@ const Dashboard = () => {
 
     const fetchWeather = async (location) => {
         if (!location) return;
-        setLoading(true);
+        setWeatherLoading(true);
         setWeatherError(null);
 
+        const isValidLocation = await validateLocation(weatherQuery);
+
+        console.log(isValidLocation);
+
+        if (!isValidLocation) {
+            setWeatherError("Place not valid. Please enter a city, state, district, or village.");
+            setWeatherLoading(false);
+            return;
+        }
+
         try {
-            // ✅ Get Current Weather from OpenWeatherMap
+            // ✅ Fetch Current Weather
             const currentWeatherResponse = await axios.get(
                 `https://api.openweathermap.org/data/2.5/weather?q=${location}&units=metric&appid=${WEATHER_API_KEY}`
             );
-
+    
             if (currentWeatherResponse.status !== 200 || !currentWeatherResponse.data) {
                 throw new Error("Current weather data not found.");
             }
-
+    
             const { temp } = currentWeatherResponse.data.main;
             const { description } = currentWeatherResponse.data.weather[0];
-
-            // ✅ Get 5-Day Forecast
+    
+            // ✅ Fetch 5-Day Forecast
             const forecastResponse = await axios.get(
                 `https://api.openweathermap.org/data/2.5/forecast?q=${location}&units=metric&appid=${WEATHER_API_KEY}`
             );
-
+    
+            console.log(forecastResponse);
             if (!forecastResponse.data || !forecastResponse.data.list) {
                 throw new Error("Weather forecast data not found.");
             }
-
-            // ✅ Extract Forecast for the Next 5 Days
+    
+            // ✅ Extract Forecast for Next 5 Days
             const dailyForecast = {};
             forecastResponse.data.list.forEach((entry) => {
-                const date = new Date(entry.dt_txt).toLocaleDateString();
+                const date = entry.dt_txt.split(" ")[0]; // Extract only YYYY-MM-DD
+    
                 if (!dailyForecast[date]) {
                     dailyForecast[date] = {
                         temp: entry.main.temp,
@@ -159,21 +187,29 @@ const Dashboard = () => {
                     };
                 }
             });
+    
+            // ✅ Get User-Selected Start Date or Default to Current Date
+            const today = new Date().toISOString().split("T")[0]; // Get today's date in YYYY-MM-DD format
+            const startDate = today ; // Use user-selected date if available, otherwise default to today
 
-            // Convert object to array (get only 5 days)
-            const forecastData = Object.keys(dailyForecast).slice(0, 5).map((date) => {
+    
+            // ✅ Filter Forecast to Start from Selected Date
+            const forecastData = Object.keys(dailyForecast)
+            .filter((date) => date >= startDate) // ✅ Keep only dates from selectedDate onward
+            .sort() // ✅ Ensure dates are in order
+            .slice(0, 5) // ✅ Take exactly 6 unique days
+            .map((date) => {
                 const dateObj = new Date(date);
-                console.log(dateObj);
                 const weekdayName = dateObj.toLocaleDateString("en-US", { weekday: "long" });
-
+        
                 return {
-                    day: `${weekdayName} (${date})`, // Shows "Monday (YYYY-MM-DD)", "Tuesday (YYYY-MM-DD)"
+                    day: `${weekdayName} (${date})`, // Example: "Monday (YYYY-MM-DD)"
                     temp: dailyForecast[date].temp,
                     condition: dailyForecast[date].condition
                 };
             });
-
-
+        
+    
             // ✅ Set Weather Data State
             setWeatherData({
                 location,
@@ -181,16 +217,17 @@ const Dashboard = () => {
                 currentCondition: description,
                 forecast: forecastData
             });
-
+    
             setWeatherQuery(location);
             setShowWeatherSearch(false);
         } catch (err) {
             setWeatherError("Failed to fetch weather data. Please check the location.");
             console.error("Weather Fetch Error:", err);
         } finally {
-            setLoading(false);
+            setWeatherLoading(false);
         }
     };
+    
 
 
     return (
@@ -290,7 +327,7 @@ const Dashboard = () => {
                             onChange={(e) => setSearchType(e.target.value)}
                             className="p-2 text-sm bg-gray-100 rounded-md border border-gray-300 focus:outline-none"
                         >
-                            <option value="in">Search neaby placen in </option>
+                            <option value="in">Search famous places in </option>
                             <option value="near">Search nearby places within </option>
                         </select>
 
@@ -327,7 +364,7 @@ const Dashboard = () => {
                             🔍 Search
                         </button>
                     </div>
-                    {loading && <p className="text-blue-500 font-medium mt-2 animate-pulse text-sm">⏳ Searching...</p>}
+                    {magicSearchLoading && <p className="text-blue-500 font-medium mt-2 animate-pulse text-sm">⏳ Searching...</p>}
                     {searchError && <p className="text-red-500 font-medium mt-2 text-sm">⚠️ {searchError}</p>}
                     <div className="mt-4">
                         {places.length > 0 ? (
@@ -337,11 +374,15 @@ const Dashboard = () => {
                                         <h3 className="text-md font-semibold text-gray-800 flex items-center">📍 {place.name}</h3>
                                         <p className="text-gray-500 text-sm">{place.address}</p>
                                         <p className="text-gray-600 italic text-sm mt-1">{place.description}</p>
+                                        <div className="flex items-center text-gray-600 text-sm mt-1">
+                                            <span className="mr-2"><b>Rating:</b> {place.rating}</span>
+                                            <span><b>Reviews:</b> {place.total_reviews}</span>
+                                        </div>
                                     </li>
                                 ))}
                             </ul>
                         ) : (
-                            !loading && !searchError && (
+                            !magicSearchLoading && !searchError && (
                                 <p className="text-gray-500 font-semibold text-sm text-center mt-3 animate-fade-in">✨ Let The Magic Happen ✨</p>
                             )
                         )}
@@ -352,6 +393,7 @@ const Dashboard = () => {
                 <div className="p-4 bg-gradient-to-r from-blue-400 to-blue-600 rounded-lg shadow-md text-white">
                     <h2 className="text-lg font-bold mb-2">🌦 Weather Info</h2>
                     <p className="text-white text-sm">Check current and upcoming weather conditions.</p>
+                   
                     {weatherData && (
                         <div className="mb-2 flex items-center">
                             <input type="checkbox" checked={showWeatherSearch} onChange={() => setShowWeatherSearch(!showWeatherSearch)} className="mr-2" />
@@ -364,9 +406,13 @@ const Dashboard = () => {
                             <button onClick={() => fetchWeather(weatherQuery)} className="bg-yellow-400 text-black px-3 py-2 rounded-r-md hover:bg-yellow-500 transition text-sm">🔍 Search</button>
                         </div>
                     )}
-                    {loading && <p className="text-yellow-300 mt-2 animate-pulse text-sm">Fetching weather data...</p>}
+                    
+                        
+                
+
+                    {weatherLoading && <p className="text-yellow-300 mt-2 animate-pulse text-sm">Fetching weather data...</p>}
                     {weatherError && <p className="text-red-500 mt-2 text-sm">⚠️ {weatherError}</p>}
-                    {weatherData && (
+                    {weatherData &&(
                         <div className="mt-4 bg-white text-black border border-gray-300 p-3 rounded-md shadow-sm">
                             <h3 className="text-sm font-bold mb-1">🌍 Weather for {weatherData.location}</h3>
 
